@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Configure these environment variables to point the API at your external MySQL
+      # Example: DB_HOST=host.docker.internal (macOS Docker Desktop) or an IP/hostname
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      PORT: ${PORT:-5001}
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # The frontend Dockerfile uses nginx and exposes 80; map it to host 3000 for convenience
+      - "3000:80"
+    environment:
+      # Optional: allow overriding the static build base URL
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5001}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
