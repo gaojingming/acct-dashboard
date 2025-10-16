@@ -1,107 +1,198 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
+
+const API_URL = 'http://localhost:5001/get-fund-net-value-records';
+
+// Helper: compute returns series relative to base value: (v / base - 1) * 100
+const computeReturnsPercent = (values, baseIndex = 0) => {
+  if (!values || values.length === 0) return [];
+  const base = values[baseIndex];
+  if (base === 0 || base == null) return values.map(() => 0);
+  return values.map((v) => ((v - base) / base) * 100);
+};
 
 const ReturnsOfFundLineChart = () => {
   const chartRef = useRef(null);
+  const chartInstanceRef = useRef(null);
 
+  const [rawData, setRawData] = useState([]); // array of records from API
+
+  // Fetch data on mount
   useEffect(() => {
-    const chartInstance = echarts.init(chartRef.current);
+    let cancelled = false;
 
-    const fetchMockData = async () => {
-      // Simulate an API call to fetch mock data
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            xAxisData: ['2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05'],
-            seriesData: [
-              { name: '基准收益', data: [0, 0.2, 3.3, -1.2, 0.337] },
-              { name: '投资组合收益', data: [0+1, 0.2+1, 3.3+1, -1.2-1, 0.337+1] },
-              // { name: '系列3', data: [150, 232, 201, 154, 190] },
-            ],
-          });
-        }, 200); // Simulate network delay
-      });
+    const fetchData = async () => {
+      try {
+        const resp = await fetch(API_URL);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        const data = Array.isArray(json.data) ? json.data : [];
+        if (!cancelled) {
+          // sort by date ascending to ensure order
+          data.sort((a, b) => new Date(a.date) - new Date(b.date));
+          setRawData(data);
+        }
+      } catch (err) {
+        // fallback: empty
+        console.error('Failed to fetch fund net value records', err);
+        if (!cancelled) setRawData([]);
+      }
     };
 
-    fetchMockData().then((mockData) => {
-      const option = {
-        tooltip: {
-          trigger: 'axis',
-        },
-        legend: {
-          data: mockData.seriesData.map((series) => series.name),
-        },
-        grid: {
-          left: '5%',
-          right: '5%',
-          top: '10%',
-          bottom: '10%',
-          containLabel: true,
-        },
-        xAxis: {
-          type: 'category',
-          data: mockData.xAxisData,
-        },
-        yAxis: {
-          type: 'value',
-        },
-        series: mockData.seriesData.map((series) => ({
-          name: series.name,
-          type: 'line',
-          data: series.data,
-        })),
-      };
-
-      chartInstance.setOption(option);
-    });
-    // const option = {
-    //   tooltip: {
-    //     trigger: 'axis',
-    //   },
-    //   legend: {
-    //     data: ['系列1', '系列2', '系列3'],
-    //   },
-    //   grid: {
-    //     left: '5%',
-    //     right: '5%',
-    //     top: '10%',
-    //     bottom: '10%',
-    //     containLabel: true,
-    //   },
-    //   xAxis: {
-    //     type: 'category',
-    //     data: ['2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05'],
-    //   },
-    //   yAxis: {
-    //     type: 'value',
-    //   },
-    //   series: [
-    //     {
-    //       name: '系列1',
-    //       type: 'line',
-    //       data: [120, 132, 101, 134, 90],
-    //     },
-    //     {
-    //       name: '系列2',
-    //       type: 'line',
-    //       data: [220, 182, 191, 234, 290],
-    //     },
-    //     {
-    //       name: '系列3',
-    //       type: 'line',
-    //       data: [150, 232, 201, 154, 190],
-    //     },
-    //   ],
-    // };
-    //
-    // chartInstance.setOption(option);
-
+    fetchData();
     return () => {
-      chartInstance.dispose();
+      cancelled = true;
     };
   }, []);
 
-  return <div ref={chartRef} style={{ width: '100%', height: '400px' }} />;
+  // Initialize chart instance
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartInstanceRef.current = echarts.init(chartRef.current);
+    const instance = chartInstanceRef.current;
+
+    const resizeHandler = () => instance.resize();
+    window.addEventListener('resize', resizeHandler);
+
+    return () => {
+      window.removeEventListener('resize', resizeHandler);
+      instance.dispose();
+      chartInstanceRef.current = null;
+    };
+  }, []);
+
+  // Recompute series and set option whenever rawData changes
+  useEffect(() => {
+    const instance = chartInstanceRef.current;
+    if (!instance) return;
+
+    // build arrays
+    const dates = rawData.map((r) => r.date);
+    const benchmarkValues = rawData.map((r) => r.benchmark_index);
+    const returns = rawData.map((r) => r.returns);
+
+    // default base index is 0 (will be updated when dataZoom changes)
+    const baseIdx = 0;
+
+    const benchmarkReturns = computeReturnsPercent(benchmarkValues, baseIdx);
+    const totalReturns = computeReturnsPercent(returns, baseIdx);
+    const excessReturns = totalReturns.map((t, i) => t - (benchmarkReturns[i] ?? 0));
+
+    const option = {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params) => {
+          const axisLabel = params[0]?.axisValue;
+          let s = axisLabel + '\n';
+          params.forEach((p) => {
+            s += `${p.marker} ${p.seriesName}: ${p.data == null ? '-': p.data.toFixed(2)}%\n`;
+          });
+          return s;
+        },
+      },
+      legend: {
+        data: ['基准收益率(%)', '投资组合收益率(%)', '超额收益率(%)'],
+        top: 10,
+      },
+      grid: {
+        left: '6%',
+        right: '6%',
+        top: '12%',
+        bottom: '20%',
+        containLabel: true,
+      },
+      xAxis: {
+        type: 'category',
+        data: dates,
+        boundaryGap: false,
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: '{value} %',
+        },
+      },
+      dataZoom: [
+        {
+          type: 'slider',
+          show: true,
+          realtime: true,
+          bottom: 6,
+          start: 0,
+          end: 100,
+        },
+      ],
+      series: [
+        {
+          name: '基准收益率(%)',
+          type: 'line',
+          data: benchmarkReturns,
+          smooth: true,
+          showSymbol: false,
+        },
+        {
+          name: '投资组合收益率(%)',
+          type: 'line',
+          data: totalReturns,
+          smooth: true,
+          showSymbol: false,
+        },
+        {
+          name: '超额收益率(%)',
+          type: 'line',
+          data: excessReturns,
+          smooth: true,
+          showSymbol: false,
+        },
+      ],
+    };
+
+    instance.setOption(option);
+
+    // Listen for zoom change events to recompute series based on first visible point
+    const onDataZoom = (params) => {
+      try {
+        const z = params.batch?.[0] ?? params;
+        // z has start and end in percent (0-100)
+        const startPct = z.start ?? 0;
+        const len = rawData.length;
+        if (len === 0) return;
+        const startIdx = Math.max(0, Math.min(len - 1, Math.floor((startPct / 100) * len)));
+
+        // recompute with base = startIdx
+        const bReturns = computeReturnsPercent(benchmarkValues, startIdx);
+        const tReturns = computeReturnsPercent(totalReturns, startIdx);
+        const eReturns = tReturns.map((t, i) => t - (bReturns[i] ?? 0));
+
+        instance.setOption({
+          series: [
+            { data: bReturns },
+            { data: tReturns },
+            { data: eReturns },
+          ],
+        });
+      } catch (err) {
+        // ignore
+        console.error('dataZoom handler error', err);
+      }
+    };
+
+    instance.off('datazoom', onDataZoom);
+    instance.on('datazoom', onDataZoom);
+
+    return () => {
+      try {
+        instance.off('datazoom', onDataZoom);
+      } catch (e) {}
+    };
+  }, [rawData]);
+
+  return (
+    <div>
+      {/* dataZoom slider is shown under the chart; drag it to change the visible window and base point */}
+      <div ref={chartRef} style={{ width: '100%', height: '420px' }} />
+    </div>
+  );
 };
 
 export default ReturnsOfFundLineChart;

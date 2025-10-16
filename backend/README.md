@@ -23,3 +23,18 @@ Production / long-running
 
 Database table
 The service expects a table named `fund_net_values` with at least: id, fund_code, net_value_date, net_value. Adjust `app.py` SELECT statement if your schema differs.
+
+Endpoint query params and returned shape
+- Optional query params:
+	- `fund_code` (string) — filter rows by fund code
+	- `limit` (integer) — maximum number of rows to return
+
+- Returned JSON shape:
+	{
+		"data": [
+			{ "id": 1, "fund_code": "ABC", "net_value_date": "2025-01-01", "net_value": 1.234 },
+			...
+		]
+	}
+
+The endpoint now uses pandas to load the SQL result into a DataFrame before returning records. This makes it easier to add server-side calculations — you can modify `app.py` to perform DataFrame ops before converting to JSON.
