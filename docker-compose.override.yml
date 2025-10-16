@@ -1,0 +1,20 @@
+version: '3.8'
+services:
+  backend:
+    # Mount local backend source into the container for hot-reload during development
+    volumes:
+      - ./backend:/app:delegated
+    environment:
+      FLASK_DEBUG: '1'
+      FLASK_APP: app.py
+      PORT: 5001
+    command: flask run --host=0.0.0.0 --port=5001
+
+  # Optional: run frontend dev server for hot-reload during development
+#  frontend:
+#    volumes:
+#      - ./frontend:/app:delegated
+#    working_dir: /app
+#    command: npm start
+#    ports:
+#      - "3000:3000"

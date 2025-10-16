@@ -9,5 +9,8 @@ COPY . .
 
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
+ENV PORT=5001
+
+EXPOSE 5001
 
 CMD ["python", "app.py"]

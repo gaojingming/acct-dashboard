@@ -53,7 +53,8 @@ def get_fund_net_value_records():
 
 
 if __name__ == '__main__':
-    # Default to 5001 for local development to match requested port
-    port = int(os.environ.get('PORT', 5000))
+    # Default to 5001 for local development and container runtime as requested
+    # Allow overriding via the PORT environment variable
+    port = int(os.environ.get('PORT', 5001))
     app.logger.info(f"Starting Flask app on 0.0.0.0:{port}")
     app.run(host='0.0.0.0', port=port)

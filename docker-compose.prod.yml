@@ -6,8 +6,6 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      # Configure these environment variables to point the API at your external MySQL
-      # Example: DB_HOST=host.docker.internal (macOS Docker Desktop) or an IP/hostname
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
@@ -21,22 +19,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    command: ["gunicorn", "-b", "0.0.0.0:5001", "app:app"]
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Build-time API URL used when creating the static React build.
         REACT_APP_API_URL: ${REACT_APP_API_URL:-http://backend:5001}
     restart: unless-stopped
     ports:
-      # Map host 8001 to container 8001 so frontend is reachable at http://localhost:8001
       - "8001:8001"
     environment:
-      # Optional: allow overriding the static build base URL
-      # At runtime the frontend can default to contacting the backend service directly
-      # inside the compose network. Use this for non-built static files or local overrides.
       REACT_APP_API_URL: ${REACT_APP_API_URL:-http://backend:5001}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/" ]
@@ -44,3 +38,8 @@ services:
       timeout: 5s
       retries: 3
 
+# Notes:
+# - This production compose expects environment variables to be supplied via a .env file
+#   or environment injection mechanism from your deployment platform.
+# - It runs the backend with gunicorn (no debug / reload), and serves the frontend
+#   static build with nginx listening on 8001 inside the container.
