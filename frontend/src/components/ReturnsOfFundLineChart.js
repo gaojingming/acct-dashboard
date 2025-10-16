@@ -66,17 +66,18 @@ const ReturnsOfFundLineChart = () => {
     const instance = chartInstanceRef.current;
     if (!instance) return;
 
-    // build arrays
-    const dates = rawData.map((r) => r.date);
-    const benchmarkValues = rawData.map((r) => r.benchmark_index);
-    const returns = rawData.map((r) => r.returns);
+  // build arrays
+  const dates = rawData.map((r) => r.date);
+  const benchmarkValues = rawData.map((r) => r.benchmark_index);
+  // raw returns from backend (portfolio returns), use a distinct name to avoid confusion
+  const returnsData = rawData.map((r) => r.returns);
 
     // default base index is 0 (will be updated when dataZoom changes)
     const baseIdx = 0;
 
     const benchmarkReturns = computeReturnsPercent(benchmarkValues, baseIdx);
-    const totalReturns = computeReturnsPercent(returns, baseIdx);
-    const excessReturns = totalReturns.map((t, i) => t - (benchmarkReturns[i] ?? 0));
+  const totalReturns = computeReturnsPercent(returnsData, baseIdx);
+  const excessReturns = totalReturns.map((t, i) => t - (benchmarkReturns[i] ?? 0));
 
     const option = {
       tooltip: {
@@ -127,21 +128,21 @@ const ReturnsOfFundLineChart = () => {
           name: '基准收益率(%)',
           type: 'line',
           data: benchmarkReturns,
-          smooth: true,
+          smooth: false,
           showSymbol: false,
         },
         {
           name: '投资组合收益率(%)',
           type: 'line',
           data: totalReturns,
-          smooth: true,
+          smooth: false,
           showSymbol: false,
         },
         {
           name: '超额收益率(%)',
           type: 'line',
           data: excessReturns,
-          smooth: true,
+          smooth: false,
           showSymbol: false,
         },
       ],
@@ -154,14 +155,14 @@ const ReturnsOfFundLineChart = () => {
       try {
         const z = params.batch?.[0] ?? params;
         // z has start and end in percent (0-100)
-        const startPct = z.start ?? 0;
+  const startPct = z.start ?? 0;
         const len = rawData.length;
         if (len === 0) return;
         const startIdx = Math.max(0, Math.min(len - 1, Math.floor((startPct / 100) * len)));
 
         // recompute with base = startIdx
         const bReturns = computeReturnsPercent(benchmarkValues, startIdx);
-        const tReturns = computeReturnsPercent(totalReturns, startIdx);
+  const tReturns = computeReturnsPercent(returnsData, startIdx);
         const eReturns = tReturns.map((t, i) => t - (bReturns[i] ?? 0));
 
         instance.setOption({
